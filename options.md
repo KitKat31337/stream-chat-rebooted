@@ -46,7 +46,7 @@ file:///C:/path/to/stream-chat-rebooted/chat.html?sb_enabled=true&bubbles=true
 | `timestamp`        | false                | boolean       | If set to true displays the time of the message                                                | `timestamp=true`                 |
 | `timestamp_locale` | en-US                | locale        | The regional setting to use for the message time                                               | `timestamp_locale=de-DE`         |
 | `cmdprefix`        |                      | string        | A prefix for bot commands. If this is set, chat messages starting with this won't be displayed | `cmdprefix=!`                    |
-| `bots`             |                      | string        | A comma-separated list of accounts whose messages will not be shown(case-insensitive)          | `bots=streamelements,streamlabs` |
+| `bots`             |                      | string        | A comma-separated list of user names, display names, or channel IDs whose messages will not be shown (case-insensitive) | `bots=streamelements,streamlabs` |
 | `fade_duration`    |                      | number        | Time in seconds until messages are removed                                                     | `fade_duration=60`               |
 | `max_messages`     |                      | number        | Maximum number of messages before old ones get deleted                                         | `max_messages=10`                |
 | `fontfamily`       | Open Sans            | string        | set (any locally installed) font                                                               | `fontfamily=Calibri`             |

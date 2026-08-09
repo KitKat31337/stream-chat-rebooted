@@ -328,7 +328,7 @@
     <div id="connection-status" style="display: none;"></div>
 
     <script>
-        const STREAMCHAT_VERSION = '0.4.0';
+        const STREAMCHAT_VERSION = '0.4.1';
         const STREAMCHAT_NAME = 'stream-chat-rebooted';
         const STREAMCHAT_GH_USER = 'narnacle';
         const STREAMCHAT_GH_REPO = 'stream-chat-rebooted';
@@ -568,7 +568,10 @@
 
             let bot_list = [];
             if (url.searchParams.get("bots") !== null) {
-                bot_list = url.searchParams.get("bots").toLowerCase().split(',');
+                bot_list = url.searchParams.get("bots")
+                    .split(',')
+                    .map(bot => normalize_user_name(bot))
+                    .filter(bot => bot !== '');
             }
 
             // TODO: Implement different timestamp formats
@@ -989,6 +992,7 @@
                         div_message.style.borderColor = get_color_hex(background_color);
                     }
 
+                    div_message.style.backgroundColor = get_color_hex(background_color);
                     el_user.style.backgroundColor = get_color_hex(background_color);
 
                 } else {
@@ -1057,10 +1061,10 @@
         let StreamerBot = {
             'message': {
                 'twitch': async (msg_id, user_id, author, author_color, message, emotes = [], role = 0,
-                    badges = [], highlight = Highlights.None, pronoun = false, avatar = null) => {
+                    badges = [], highlight = Highlights.None, pronoun = false, avatar = null, author_aliases = []) => {
                     // TODO handle cheermotes
 
-                    if (skip_message(message, author)) {
+                    if (skip_message(message, [author, ...author_aliases])) {
                         return;
                     }
 
@@ -1123,7 +1127,11 @@
                     add_message(msg_id, message, author, color, 0, badges, highlight, 'twitch');
                 },
                 'youtube': (message_id, user_id, user_name, message, timestamp, owner, moderator, sponsor,
-                    verified, avatar = null) => {
+                    verified, avatar = null, user_aliases = []) => {
+                    if (skip_message(message, [user_name, user_id, ...user_aliases])) {
+                        return;
+                    }
+
                     let author = {
                         name: user_name,
                         id: user_id,
@@ -1277,8 +1285,8 @@
                     add_message(message_id, message, author, color, timestamp, badges, Highlights.None, 'youtube');
                 },
                 'kick': async (message_id, user_id, user_name, message, color, emotes = [], badges = [],
-                    pronoun = false, avatar = null) => {
-                    if (skip_message(message, user_name)) {
+                    pronoun = false, avatar = null, user_aliases = []) => {
+                    if (skip_message(message, [user_name, user_id, ...user_aliases])) {
                         return;
                     }
 
@@ -1346,12 +1354,20 @@
          * @returns {boolean} True if the message should be skipped, false otherwise
          */
         function skip_message(message, user) {
-            if ((config['exclusion']['cmdprefix'] !== false && message.startsWith(config['exclusion']['cmdprefix'])) ||
-                (config['exclusion']['bots'].includes(user.toLowerCase()))) {
+            const users = Array.isArray(user) ? user : [user];
+            const normalized_users = users.map(candidate => normalize_user_name(candidate));
+            const normalized_message = String(message || '');
+
+            if ((config['exclusion']['cmdprefix'] !== false && normalized_message.startsWith(config['exclusion']['cmdprefix'])) ||
+                normalized_users.some(candidate => candidate !== '' && config['exclusion']['bots'].includes(candidate))) {
                 return true;
             } else {
                 return false;
             }
+        }
+
+        function normalize_user_name(user) {
+            return String(user || '').normalize('NFKC').trim().replace(/^@+/, '').toLowerCase();
         }
 
         function remove_old_messages() {
@@ -1500,6 +1516,7 @@
                 addCSSRule(config['ui']['bubbles']['border']['radius'], bubble, 'border-radius');
                 addCSSRule(config['ui']['bubbles']['border']['size'], bubble, 'border-width');
 
+                addCSSRule(config['ui']['colors']['text_background'], bubble, 'background-color');
                 addCSSRule(config['ui']['colors']['text_background'], username, 'background-color');
                 addCSSRule(config['ui']['colors']['message'], message, 'color');
                 addCSSRule(config['ui']['colors']['text'], username, 'color');
@@ -1605,7 +1622,14 @@
                                 StreamerBot['message']['twitch'](m.msgId, m.userId, m.displayName,
                                     m.color, m.message, m.emotes, m.role, m.badges,
                                     m.isHighlighted ? Highlights.Highlight : Highlights.None, false,
-                                    avatar_url(m.user, m));
+                                    avatar_url(m.user, m), [
+                                        m.userName,
+                                        m.userLogin,
+                                        m.login,
+                                        m.user?.name,
+                                        m.user?.login,
+                                        m.user?.displayName
+                                    ]);
 
                             } else if (wsdata.event.type === 'Announcement') {
                                 if (config["ui"]["announcements"] === false) {
@@ -1635,7 +1659,14 @@
 
                                 StreamerBot['message']['twitch'](m.msgId, m.userId, m.displayName, color,
                                     m.message, m.emotes, m.role, m.badges, Highlights.Announcement, false,
-                                    avatar_url(m.user, m));
+                                    avatar_url(m.user, m), [
+                                        m.userName,
+                                        m.userLogin,
+                                        m.login,
+                                        m.user?.name,
+                                        m.user?.login,
+                                        m.user?.displayName
+                                    ]);
 
                             } else if (wsdata.event.type === 'UserTimedOut' || wsdata.event.type ===
                                 'UserBanned') {
@@ -1661,13 +1692,25 @@
                             if (wsdata.event.type === 'Message') {
                                 let m = wsdata.data;
 
-                                if (skip_message(m.message, m.user['name'])) {
+                                if (skip_message(m.message, [
+                                    m.user?.name,
+                                    m.user?.displayName,
+                                    m.user?.channelId,
+                                    m.user?.id,
+                                    m.channelId,
+                                    m.userId
+                                ])) {
                                     return;
                                 }
 
                                 StreamerBot['message']['youtube'](m.eventId, m.user.id, m.user.name, m.message, 0,
                                     m.user.isOwner, m.user.isModerator, m.user.isSponsor, m.user.isVerified,
-                                    avatar_url(m.user, m));
+                                    avatar_url(m.user, m), [
+                                        m.user?.displayName,
+                                        m.user?.channelId,
+                                        m.channelId,
+                                        m.userId
+                                    ]);
                             } else if (wsdata.event.type === 'MessageDeleted') {
                                 console.debug(['Message deleted', wsdata]);
                                 remove_messages_by_message_id(pick_first(
@@ -1710,7 +1753,16 @@
                                     m.emotes || [],
                                     m.badge || m.badges || [],
                                     false,
-                                    avatar_url(user, m)
+                                    avatar_url(user, m),
+                                    [
+                                        typeof user === 'object' ? user?.displayName : null,
+                                        typeof user === 'object' ? user?.login : null,
+                                        typeof user === 'object' ? user?.username : null,
+                                        m.displayName,
+                                        m.username,
+                                        m.userName,
+                                        m.login
+                                    ]
                                 );
                             } else if (wsdata.event.type === 'UserTimedOut' || wsdata.event.type === 'UserBanned') {
                                 console.debug(['Kick user timed out or banned', wsdata]);
