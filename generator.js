@@ -81,6 +81,7 @@ let fields = [
 
     { group: groups.Theme, label: "Direction (horizontal if enabled)", name: "direction", type: "checkbox", help: "Set to 'horizontal' this will scroll the text from right to left instead of bottom to top" },
     { group: groups.Theme, label: "Bubbles", name: "bubbles", type: "checkbox", help: "Displays bubbles instead of the standard chat log" },
+    { group: groups.Theme, label: "Legacy bubble message background", name: "legacy_bubble_body", type: "checkbox", help: "Uses the original grey message body for bubbles while keeping the colored username/header area" },
     { group: groups.Theme, label: "Badges", name: "badges", type: "checkbox", help: "If set to false this disable broadcaster/VIP/moderator badges"},
     { group: groups.Theme, label: "Badges on the left", name: "badges_left", type: "checkbox", help: "Moves broadcaster/VIP/moderator badges to the left"},
     { group: groups.Theme, label: "Platform logos", name: "platform_badges", type: "checkbox", help: "Shows compact Twitch, YouTube, or Kick logos next to chat names" },
@@ -573,21 +574,25 @@ if (isLocal === true) {
 
 const optionRow = (selector) => document.querySelector(selector).closest(".form-row");
 const bubbles = document.querySelector("input[name=bubbles]");
+const legacy_bubble_body = optionRow("input[name=legacy_bubble_body]");
 const bubble_color = optionRow("input[name=bubble_color]");
 const bubble_border_color = optionRow("input[name=bubble_border_color]");
 const bubble_border_radius = optionRow("input[name=bubble_border_radius]");
 const bubble_border_size = optionRow("input[name=bubble_border_size]");
 bubbles.addEventListener("change", (e) => {
     if (e.target.checked) {
+        legacy_bubble_body.style.display = "";
         bubble_color.style.display = "";
         bubble_border_color.style.display = "";
         bubble_border_radius.style.display = "";
         bubble_border_size.style.display = "";
     } else {
+        legacy_bubble_body.style.display = "none";
         bubble_color.style.display = "none";
         bubble_border_color.style.display = "none";
         bubble_border_radius.style.display = "none";
         bubble_border_size.style.display = "none";
+        legacy_bubble_body.querySelector("input").checked = false;
         document.getElementById("bubble_color_nullable").checked = false;
     }
 });

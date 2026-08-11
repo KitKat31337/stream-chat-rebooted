@@ -23,6 +23,7 @@ file:///C:/path/to/stream-chat-rebooted/chat.html?sb_enabled=true&bubbles=true
 | `version_alert`    | false                | boolean       | Uses a popup instead of the in-overlay update notification. CAREFUL: If you have the overlay setup more than once or reload the overlay frequently this might be a bad idea | `version_alert=true`   |
 | `direction`        |                      | horizontal    | Set to "horizontal" this will scroll the text from right to left instead of bottom to top      | `direction=horizontal`           |
 | `bubbles`          | false                | boolean       | Displays bubbles instead of the standard chat log display                                      | `bubbles=true`                   |
+| `legacy_bubble_body` | false              | boolean       | Uses the original grey message body for bubbles while keeping the colored username/header area | `legacy_bubble_body=true`        |
 | `bubble_color`     |                      | color         | If set overrides chat bubble color                                                             | `bubble_color=00FF00`            |
 | `bubble_border_color` |                   | color         | If set overrides chat bubble border color                                                             | `bubble_color=00FF00`            |
 | `bubble_border_size` |                    | string        | If set overrides chat bubble border size                                                       | `bubble_border_size=2em`         |

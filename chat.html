@@ -328,7 +328,7 @@
     <div id="connection-status" style="display: none;"></div>
 
     <script>
-        const STREAMCHAT_VERSION = '0.4.1';
+        const STREAMCHAT_VERSION = '0.4.2';
         const STREAMCHAT_NAME = 'stream-chat-rebooted';
         const STREAMCHAT_GH_USER = 'narnacle';
         const STREAMCHAT_GH_REPO = 'stream-chat-rebooted';
@@ -632,6 +632,7 @@
                     'direction': direction,
                     'bubbles': {
                         'enabled': searchParamIsTrue("bubbles"),
+                        'legacy_body': searchParamIsTrue("legacy_bubble_body"),
                         'border': {
                             'radius': searchParamOrDefault("bubble_border_radius", null),
                             'size': searchParamOrDefault("bubble_border_size", null),
@@ -896,6 +897,57 @@
             return null;
         }
 
+        let normalize_twitch_emotes = (emotes) => {
+            if (!Array.isArray(emotes)) {
+                return [];
+            }
+
+            return emotes.map(emote => ({
+                imageUrl: pick_first(emote.imageUrl, emote.ImageUrl, emote.url),
+                name: pick_first(emote.name, emote.Name, emote.text),
+                startIndex: parseInt(pick_first(emote.startIndex, emote.StartIndex, 0), 10),
+                endIndex: parseInt(pick_first(emote.endIndex, emote.EndIndex, -1), 10),
+            })).filter(emote => emote.imageUrl && Number.isInteger(emote.startIndex) && emote.endIndex >= emote.startIndex);
+        }
+
+        let normalize_twitch_badges = (badges) => {
+            if (!Array.isArray(badges)) {
+                return [];
+            }
+
+            return badges.map(badge => ({
+                url: pick_first(badge.url, badge.imageUrl, badge.ImageUrl),
+            })).filter(badge => badge.url);
+        }
+
+        let normalize_twitch_chat_payload = (data) => {
+            const m = data?.message || data || {};
+            const user = m.user || {};
+            const meta = m.meta || {};
+
+            return {
+                msgId: pick_first(m.msgId, m.messageId, m.id),
+                userId: pick_first(m.userId, user.id),
+                displayName: pick_first(m.displayName, m.userName, user.name, user.login, m.userLogin),
+                color: pick_first(m.color, user.color),
+                message: pick_first(m.message, m.text, ''),
+                emotes: normalize_twitch_emotes(m.emotes),
+                role: pick_first(m.role, user.role, 0),
+                badges: normalize_twitch_badges(pick_first(m.badges, user.badges, [])),
+                isHighlighted: pick_first(m.isHighlighted, meta.isHighlighted, false),
+                avatar: avatar_url(user, m),
+                aliases: [
+                    m.userName,
+                    m.userLogin,
+                    m.login,
+                    user.name,
+                    user.login,
+                    user.displayName,
+                    user.id,
+                ],
+            };
+        }
+
         let add_message = (id, message, author, color, timestamp, badges = [], highlight = Highlights.None, platform = null) => {
             let background_color = get_user_color(color);
             let text_color = get_text_color(background_color);
@@ -992,7 +1044,9 @@
                         div_message.style.borderColor = get_color_hex(background_color);
                     }
 
-                    div_message.style.backgroundColor = get_color_hex(background_color);
+                    if (config['ui']['bubbles']['legacy_body'] !== true) {
+                        div_message.style.backgroundColor = get_color_hex(background_color);
+                    }
                     el_user.style.backgroundColor = get_color_hex(background_color);
 
                 } else {
@@ -1064,6 +1118,9 @@
                     badges = [], highlight = Highlights.None, pronoun = false, avatar = null, author_aliases = []) => {
                     // TODO handle cheermotes
 
+                    emotes = normalize_twitch_emotes(emotes);
+                    badges = normalize_twitch_badges(badges);
+
                     if (skip_message(message, [author, ...author_aliases])) {
                         return;
                     }
@@ -1109,14 +1166,6 @@
                         }
                         message_new += htmlentities(message.substring(message_index));
                         message = message_new;
-                    }
-
-                    if (badges.length > 0) {
-                        badges = badges.map(badge => {
-                            return {
-                                url: badge["imageUrl"]
-                            };
-                        });
                     }
 
                     if (Highlights.Announcement === highlight) {
@@ -1516,7 +1565,9 @@
                 addCSSRule(config['ui']['bubbles']['border']['radius'], bubble, 'border-radius');
                 addCSSRule(config['ui']['bubbles']['border']['size'], bubble, 'border-width');
 
-                addCSSRule(config['ui']['colors']['text_background'], bubble, 'background-color');
+                if (config['ui']['bubbles']['legacy_body'] !== true) {
+                    addCSSRule(config['ui']['colors']['text_background'], bubble, 'background-color');
+                }
                 addCSSRule(config['ui']['colors']['text_background'], username, 'background-color');
                 addCSSRule(config['ui']['colors']['message'], message, 'color');
                 addCSSRule(config['ui']['colors']['text'], username, 'color');
@@ -1617,29 +1668,22 @@
                     } else if (wsdata.event) {
                         if (wsdata.event.source === 'Twitch') {
                             if (wsdata.event.type === 'ChatMessage') {
-                                let m = wsdata.data.message;
+                                let m = normalize_twitch_chat_payload(wsdata.data);
 
                                 StreamerBot['message']['twitch'](m.msgId, m.userId, m.displayName,
                                     m.color, m.message, m.emotes, m.role, m.badges,
                                     m.isHighlighted ? Highlights.Highlight : Highlights.None, false,
-                                    avatar_url(m.user, m), [
-                                        m.userName,
-                                        m.userLogin,
-                                        m.login,
-                                        m.user?.name,
-                                        m.user?.login,
-                                        m.user?.displayName
-                                    ]);
+                                    m.avatar, m.aliases);
 
                             } else if (wsdata.event.type === 'Announcement') {
                                 if (config["ui"]["announcements"] === false) {
                                     return;
                                 }
 
-                                let m = wsdata.data;
+                                let m = normalize_twitch_chat_payload(wsdata.data);
 
                                 let color = '';
-                                switch (m.announcementColor.toLowerCase()) {
+                                switch (String(wsdata.data?.announcementColor || '').toLowerCase()) {
                                     case 'blue':
                                         color = '#0099ff';
                                         break;
@@ -1659,14 +1703,7 @@
 
                                 StreamerBot['message']['twitch'](m.msgId, m.userId, m.displayName, color,
                                     m.message, m.emotes, m.role, m.badges, Highlights.Announcement, false,
-                                    avatar_url(m.user, m), [
-                                        m.userName,
-                                        m.userLogin,
-                                        m.login,
-                                        m.user?.name,
-                                        m.user?.login,
-                                        m.user?.displayName
-                                    ]);
+                                    m.avatar, m.aliases);
 
                             } else if (wsdata.event.type === 'UserTimedOut' || wsdata.event.type ===
                                 'UserBanned') {
